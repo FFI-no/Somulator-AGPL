@@ -1,0 +1,70 @@
+!!! 5
+%html{ html_attributes }
+  %head
+    %meta{ charset: 'utf-8' }/
+    %meta{ name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' }/
+
+    - if cdn_host?
+      %link{ rel: 'dns-prefetch', href: cdn_host }/
+      %meta{ name: 'cdn-host', content: cdn_host }/
+
+    - if storage_host?
+      %link{ rel: 'dns-prefetch', href: storage_host }/
+
+    %link{ rel: 'shortcut icon', href: '/favicon.ico', type: 'image/x-icon' }/
+    - SiteUpload::FAVICON_SIZES.each do |size|
+      %link{ rel: 'icon', sizes: "#{size}x#{size}", href: favicon_path(size.to_i) || '/favicon.ico', type: 'image/x-icon' }/
+
+    - SiteUpload::APPLE_ICON_SIZES.each do |size|
+      %link{ rel: 'apple-touch-icon', sizes: "#{size}x#{size}", href: app_icon_path(size.to_i) || frontend_asset_path("icons/apple-touch-icon-#{size}x#{size}.png") }/
+
+    - if use_mask_icon?
+      %link{ rel: 'mask-icon', href: frontend_asset_path('images/logo-symbol-icon.svg'), color: '#6364FF' }/
+    %link{ rel: 'manifest', href: manifest_path(format: :json) }/
+    = javascript_inline_tag 'theme-selection.js'
+    = theme_color_tags color_scheme
+    %meta{ name: 'mobile-web-app-capable', content: 'yes' }/
+
+    %title= html_title
+
+    = theme_style_tags current_theme
+    = vite_client_tag
+    = vite_react_refresh_tag
+    = vite_polyfills_tag
+    -# Needed for the wicg-inert polyfill. It needs to be on it's own <style> tag, with this `id`
+    = vite_stylesheet_tag 'styles/entrypoints/inert.scss', media: 'all', id: 'inert-style', crossorigin: 'anonymous'
+    = vite_typescript_tag 'common.ts', crossorigin: 'anonymous'
+
+    = vite_preload_file_tag "mastodon/locales/#{I18n.locale}.json"
+
+    -# ===== FFI / Somulator customizations =====
+    -# Excon-injected scripts: cookie-based login auto-fill, SignalR client for
+    -# messaging, modal dialogs. These are raw files in /opt/mastodon/public/ —
+    -# served by Rails static file server, NOT bundled by Vite.
+    -# (The like-counter DOM manipulation scripts were removed in Sept 2026: likes
+    -# are now written straight into status_stats by Excon.)
+    = javascript_include_tag '/excon-check-set-login.js', media: 'all', crossorigin: 'anonymous'
+    = javascript_include_tag '/excon-signalr.min.js', media: 'all', crossorigin: 'anonymous'
+    = javascript_include_tag '/excon-messaging.js', media: 'all', crossorigin: 'anonymous'
+    = stylesheet_link_tag '/excon-messaging.css', skip_pipeline: true, media: 'all'
+    -# FFI branding overlay (footer banner, logo hiding) + Excon watermark. Loaded
+    -# with a distinct id so it doesn't collide with upstream's inert-style above.
+    -# The file's mtime is the cache-buster: Rails serves /inert.css with a 4-week
+    -# max-age, and Excon rewrites the file (watermark, show/hide user input) at
+    -# runtime — without the query string browsers would keep the stale copy.
+    - inert_css_version = (File.mtime(Rails.public_path.join('inert.css')).to_i rescue 0)
+    = stylesheet_link_tag "/inert.css?v=#{inert_css_version}", skip_pipeline: true, media: 'all', id: 'ffi-branding-style'
+    -# ===== end FFI / Somulator customizations =====
+    = csrf_meta_tags unless skip_csrf_meta_tags?
+    %meta{ name: 'style-nonce', content: request.content_security_policy_nonce, property: 'csp-nonce', nonce: request.content_security_policy_nonce }
+
+    = custom_stylesheet
+
+    = yield :header_tags
+
+  %body{ class: body_classes }
+    = content_for?(:content) ? yield(:content) : yield
+
+    .logo-resources{ 'tabindex' => '-1', 'inert' => true, 'aria-hidden' => 'true' }
+      = inline_svg_tag 'logo-symbol-icon.svg'
+      = inline_svg_tag 'logo-symbol-wordmark.svg'
